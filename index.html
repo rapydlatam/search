@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>Search sencillo: Customer Name + Ship Mode</title>
-  <!-- Script de Embedding (tu misma URL/región) -->
+  <!-- Script de Embedding (tu misma región) -->
   <script type="module" src="https://us-east-1.online.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js"></script>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:16px; }
@@ -39,48 +39,57 @@
   </tableau-viz>
 
   <script>
-    // Nombres exactos en tu datasource
+    // Nombres exactos de campos
     const FIELD_TEXT = 'Customer Name';
     const FIELD_SHIP = 'Ship Mode';
 
-    const viz = document.getElementById('tableau-viz');
+    const vizEl = document.getElementById('tableau-viz');
+    let vizInstance = null; // instancia real del viz (no el web component)
 
-    viz.addEventListener('firstinteractive', () => {
-      console.log('Viz listo');
+    // Cuando el viz está interactivo, recuperamos la instancia
+    vizEl.addEventListener('firstinteractive', () => {
+      const vizs = window.tableau?.VizManager?.getVizs?.() || [];
+      vizInstance = vizs[0] || null;
+      console.log('Viz listo. Vizs:', vizs.length);
     });
 
-    // API v3: obtener worksheet desde el workbook
-    async function getWorksheet() {
-      const wb = await viz.getWorkbook();
-      const active = await wb.getActiveSheet();
-      // Si fuera dashboard, elegir worksheet:
-      // if (active.getSheetType && active.getSheetType() === 'dashboard') {
-      //   const sheets = await active.getWorksheets();
-      //   return sheets.find(s => s.getName() === 'Sheet 1') || sheets[0];
+    function getWorksheet() {
+      if (!vizInstance) throw new Error('Viz aún no inicializado');
+      const active = vizInstance.workbook.activeSheet;
+      // Si fuera un dashboard:
+      // if (active.sheetType === 'dashboard') {
+      //   return active.worksheets.find(w => w.name === 'Sheet 1') || active.worksheets[0];
       // }
-      return active; // es hoja única
+      return active; // es hoja
     }
 
     async function applyFilters() {
       try {
-        const ws = await getWorksheet();
+        const ws = getWorksheet();
         const q  = document.getElementById('q').value.trim();
         const sm = document.getElementById('ship').value;
 
         console.log('Aplicando...', { q, sm });
 
         // Limpia previos (ignora si no existen)
-        try { await ws.clearFilterAsync(FIELD_TEXT); } catch (e) { console.warn('clear text', e?.message); }
-        try { await ws.clearFilterAsync(FIELD_SHIP); } catch (e) { console.warn('clear ship', e?.message); }
+        try { await ws.clearFilterAsync(FIELD_TEXT); } catch {}
+        try { await ws.clearFilterAsync(FIELD_SHIP); } catch {}
 
         if (sm) {
-          await ws.applyFilterAsync(FIELD_SHIP, sm, 'REPLACE');
-          console.log('OK Ship Mode');
+          await ws.applyFilterAsync(
+            FIELD_SHIP,
+            sm,
+            window.tableau.FilterUpdateType.REPLACE
+          );
         }
         if (q) {
-          await ws.applyFilterAsync(FIELD_TEXT, { operator: 'CONTAINS', values: [q] }, 'REPLACE');
-          console.log('OK Customer Name');
+          await ws.applyFilterAsync(
+            FIELD_TEXT,
+            { operator: window.tableau.FilterOperator.CONTAINS, values: [q] },
+            window.tableau.FilterUpdateType.REPLACE
+          );
         }
+
         console.log('Hecho');
       } catch (e) {
         console.error('applyFilters error:', e);
@@ -89,12 +98,16 @@
     }
 
     async function clearAll() {
-      const ws = await getWorksheet();
-      try { await ws.clearFilterAsync(FIELD_TEXT); } catch {}
-      try { await ws.clearFilterAsync(FIELD_SHIP); } catch {}
-      document.getElementById('q').value = '';
-      document.getElementById('ship').value = '';
-      console.log('Limpio');
+      try {
+        const ws = getWorksheet();
+        try { await ws.clearFilterAsync(FIELD_TEXT); } catch {}
+        try { await ws.clearFilterAsync(FIELD_SHIP); } catch {}
+        document.getElementById('q').value = '';
+        document.getElementById('ship').value = '';
+        console.log('Limpio');
+      } catch (e) {
+        console.error(e);
+      }
     }
 
     document.getElementById('apply').addEventListener('click', applyFilters);
