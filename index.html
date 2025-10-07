@@ -5,8 +5,8 @@
   <title>Tableau Embed + Search</title>
   <script type="module" src="https://public.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js"></script>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    #viz { width: 100%; height: 80vh; border: 1px solid #ddd; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:16px; }
+    #viz { width: 100%; height: 78vh; border: 1px solid #ddd; border-radius: 6px; }
     .controls { display:flex; flex-wrap: wrap; gap:12px; padding:10px 0; align-items: center; }
     input, select, button { padding: 8px 10px; }
   </style>
@@ -30,54 +30,62 @@
     id="viz"
     hide-tabs
     toolbar="bottom"
-    src="https://us-east-1.online.tableau.com/#/site/jacastellanos01-361c41eb62/views/Prueba_17598763501720/Sheet1?:iid=2">
+    src="https://us-east-1.online.tableau.com/t/jacastellanos01-361c41eb62/views/Prueba_17598763501720/Sheet1">
   </tableau-viz>
 
   <script>
+    // Ajusta si tus campos tienen otros nombres exactos en la fuente de datos
+    const FIELD_CUSTOMER = 'Customer Name';
+    const FIELD_CATEGORY = 'Category';
+
+    // Confirmar que el viz cargó
+    document.getElementById('viz').addEventListener('firstinteractive', () => {
+      console.log('Viz ready');
+    });
+
     async function getWorksheet() {
       const viz = document.getElementById('viz');
       const active = await viz.getActiveSheet();
       if (active.getSheetType && active.getSheetType() === 'dashboard') {
         const worksheets = await active.getWorksheets();
-        // Si tu dashboard tiene varias hojas, reemplaza por el nombre exacto:
-        // return worksheets.find(w => w.getName() === 'Sheet1');
-        return worksheets[0];
+        // Si tu dashboard tiene varias hojas, cambia por el nombre exacto:
+        return worksheets.find(w => w.getName() === 'Sheet 1') || worksheets[0];
       }
-      return active; // Es una hoja individual (Sheet1)
+      return active; // Hoja única (Sheet1)
     }
 
     async function applyFilters() {
-      const ws = await getWorksheet();
-      const q = document.getElementById('q').value.trim();
-      const cat = document.getElementById('cat').value;
+      try {
+        const ws = await getWorksheet();
+        const q = document.getElementById('q').value.trim();
+        const cat = document.getElementById('cat').value;
 
-      // Ajusta estos nombres si tus campos se llaman diferente
-      const FIELD_CUSTOMER = 'Customer Name';
-      const FIELD_CATEGORY = 'Category';
+        // Limpia primero
+        await ws.clearFilterAsync(FIELD_CUSTOMER).catch(()=>{});
+        await ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{});
 
-      // Limpia primero
-      await ws.clearFilterAsync(FIELD_CUSTOMER).catch(()=>{});
-      await ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{});
-
-      if (cat) {
-        await ws.applyFilterAsync(FIELD_CATEGORY, cat, 'REPLACE');
-      }
-      if (q) {
-        // Filtro tipo CONTAINS (Embedding API v3)
-        await ws.applyFilterAsync(FIELD_CUSTOMER, { operator: 'CONTAINS', values: [q] }, 'REPLACE');
+        if (cat) {
+          await ws.applyFilterAsync(FIELD_CATEGORY, cat, 'REPLACE');
+        }
+        if (q) {
+          await ws.applyFilterAsync(FIELD_CUSTOMER, { operator: 'CONTAINS', values: [q] }, 'REPLACE');
+        }
+        console.log('Filters applied');
+      } catch (e) {
+        console.error('applyFilters error', e);
+        alert('No se pudieron aplicar filtros. Revisa consola.');
       }
     }
 
     async function clearAll() {
       const ws = await getWorksheet();
-      const FIELD_CUSTOMER = 'Customer Name';
-      const FIELD_CATEGORY = 'Category';
       await Promise.all([
         ws.clearFilterAsync(FIELD_CUSTOMER).catch(()=>{}),
         ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{})
       ]);
       document.getElementById('q').value = '';
       document.getElementById('cat').value = '';
+      console.log('Cleared');
     }
 
     document.getElementById('searchBtn').addEventListener('click', applyFilters);
