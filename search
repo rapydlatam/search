@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Tableau Embed + Search</title>
+  <script type="module" src="https://public.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    #viz { width: 100%; height: 80vh; border: 1px solid #ddd; }
+    .controls { display:flex; flex-wrap: wrap; gap:12px; padding:10px 0; align-items: center; }
+    input, select, button { padding: 8px 10px; }
+  </style>
+</head>
+<body>
+  <h3>Demo: Tableau + Search</h3>
+
+  <div class="controls">
+    <input id="q" placeholder="Buscar Customer Name..." />
+    <select id="cat">
+      <option value="">Todas las categorías</option>
+      <option>Furniture</option>
+      <option>Office Supplies</option>
+      <option>Technology</option>
+    </select>
+    <button id="searchBtn">Aplicar</button>
+    <button id="clearBtn">Limpiar</button>
+  </div>
+
+  <tableau-viz
+    id="viz"
+    hide-tabs
+    toolbar="bottom"
+    src="https://us-east-1.online.tableau.com/#/site/jacastellanos01-361c41eb62/views/Prueba_17598763501720/Sheet1?:iid=2">
+  </tableau-viz>
+
+  <script>
+    async function getWorksheet() {
+      const viz = document.getElementById('viz');
+      const active = await viz.getActiveSheet();
+      if (active.getSheetType && active.getSheetType() === 'dashboard') {
+        const worksheets = await active.getWorksheets();
+        // Si tu dashboard tiene varias hojas, reemplaza por el nombre exacto:
+        // return worksheets.find(w => w.getName() === 'Sheet1');
+        return worksheets[0];
+      }
+      return active; // Es una hoja individual (Sheet1)
+    }
+
+    async function applyFilters() {
+      const ws = await getWorksheet();
+      const q = document.getElementById('q').value.trim();
+      const cat = document.getElementById('cat').value;
+
+      // Ajusta estos nombres si tus campos se llaman diferente
+      const FIELD_CUSTOMER = 'Customer Name';
+      const FIELD_CATEGORY = 'Category';
+
+      // Limpia primero
+      await ws.clearFilterAsync(FIELD_CUSTOMER).catch(()=>{});
+      await ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{});
+
+      if (cat) {
+        await ws.applyFilterAsync(FIELD_CATEGORY, cat, 'REPLACE');
+      }
+      if (q) {
+        // Filtro tipo CONTAINS (Embedding API v3)
+        await ws.applyFilterAsync(FIELD_CUSTOMER, { operator: 'CONTAINS', values: [q] }, 'REPLACE');
+      }
+    }
+
+    async function clearAll() {
+      const ws = await getWorksheet();
+      const FIELD_CUSTOMER = 'Customer Name';
+      const FIELD_CATEGORY = 'Category';
+      await Promise.all([
+        ws.clearFilterAsync(FIELD_CUSTOMER).catch(()=>{}),
+        ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{})
+      ]);
+      document.getElementById('q').value = '';
+      document.getElementById('cat').value = '';
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', applyFilters);
+    document.getElementById('clearBtn').addEventListener('click', clearAll);
+  </script>
+</body>
+</html>
