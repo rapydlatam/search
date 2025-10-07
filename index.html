@@ -2,111 +2,98 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Tableau Embed + Search</title>
-  <script type="module" src="https://public.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js"></script>
+  <title>Search sobre Sheet 1 (Tableau)</title>
+  <!-- Tu script de Embedding (exactamente el que pasaste) -->
+  <script type="module" src="https://us-east-1.online.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js"></script>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:16px; }
-    #viz { width: 100%; height: 78vh; border: 1px solid #ddd; border-radius: 6px; }
-    .controls { display:flex; flex-wrap: wrap; gap:12px; padding:10px 0; align-items: center; }
+    .controls { display:flex; flex-wrap: wrap; gap:10px; margin-bottom:10px; }
     input, select, button { padding: 8px 10px; }
-    button:disabled { opacity: .5; }
+    #tableau-viz { width: 100%; height: 78vh; border: 1px solid #ddd; border-radius: 6px; }
   </style>
 </head>
 <body>
-  <h3>Demo: Tableau + Search</h3>
+  <h3>Search sencillo: Customer Name + Ship Mode</h3>
 
   <div class="controls">
-    <input id="seg" placeholder="Segment (ej: Consumer)" />
-    <select id="cat">
-      <option value="">Todas las categorías</option>
-      <option>Furniture</option>
-      <option>Office Supplies</option>
-      <option>Technology</option>
+    <input id="q" placeholder="Buscar en Customer Name (contains)..." />
+    <select id="ship">
+      <option value="">Ship Mode (todos)</option>
+      <option>Standard Class</option>
+      <option>Second Class</option>
+      <option>First Class</option>
+      <option>Same Day</option>
     </select>
-    <button id="searchBtn" disabled>Aplicar</button>
-    <button id="clearBtn" disabled>Limpiar</button>
+    <button id="apply">Aplicar</button>
+    <button id="clear">Limpiar</button>
   </div>
 
+  <!-- Tu viz embebido (exactamente el que pasaste) -->
   <tableau-viz
-    id="viz"
+    id="tableau-viz"
+    src="https://us-east-1.online.tableau.com/t/jacastellanos01-361c41eb62/views/Prueba_17598763501720/Sheet1"
+    width="1263"
+    height="615"
     hide-tabs
-    toolbar="bottom"
-    src="https://us-east-1.online.tableau.com/t/jacastellanos01-361c41eb62/views/Prueba_17598763501720/Sheet1">
+    toolbar="bottom">
   </tableau-viz>
 
   <script>
-    const FIELD_SEGMENT = 'Segment';
-    const FIELD_CATEGORY = 'Category';
+    // Nombres exactos de los campos en tu datasource
+    const FIELD_TEXT = 'Customer Name';
+    const FIELD_SHIP = 'Ship Mode';
 
-    const vizEl = document.getElementById('viz');
-    const btnApply = document.getElementById('searchBtn');
-    const btnClear = document.getElementById('clearBtn');
+    const viz = document.getElementById('tableau-viz');
 
-    vizEl.addEventListener('firstinteractive', async () => {
-      console.log('Viz ready');
-
-      // Habilita botones
-      btnApply.disabled = false;
-      btnClear.disabled = false;
-
-      // Log para ver tipo de hoja y campos
-      const sheet = await vizEl.getActiveSheet();
-      console.log('Sheet type:', sheet.getSheetType && sheet.getSheetType());
-      try {
-        const summary = await sheet.getSummaryDataAsync({ maxRows: 5 });
-        console.log('Columns:', summary.getColumns().map(c => c.getFieldName()));
-      } catch (e) {
-        console.warn('No summary yet:', e);
-      }
+    viz.addEventListener('firstinteractive', () => {
+      console.log('Viz listo');
     });
 
     async function getSheet() {
-      const sheet = await vizEl.getActiveSheet();
-      if (sheet.getSheetType && sheet.getSheetType() === 'dashboard') {
-        const ws = await sheet.getWorksheets();
-        console.log('Dashboard worksheets:', ws.map(w => w.getName()));
-        return ws[0]; // ajusta si usas dashboard
-      }
-      return sheet; // hoja única (Sheet 1)
+      // Es una hoja (no dashboard), devolvemos la activa
+      return await viz.getActiveSheet();
     }
 
     async function applyFilters() {
       try {
         const ws = await getSheet();
-        const seg = document.getElementById('seg').value.trim();
-        const cat = document.getElementById('cat').value;
+        const q  = document.getElementById('q').value.trim();
+        const sm = document.getElementById('ship').value;
 
-        // Limpia primero
-        await ws.clearFilterAsync(FIELD_SEGMENT).catch(()=>{});
-        await ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{});
+        // Limpia filtros previos
+        await ws.clearFilterAsync(FIELD_TEXT).catch(()=>{});
+        await ws.clearFilterAsync(FIELD_SHIP).catch(()=>{});
 
-        if (cat) {
-          await ws.applyFilterAsync(FIELD_CATEGORY, cat, 'REPLACE');
+        // Aplica Ship Mode (exacto)
+        if (sm) {
+          await ws.applyFilterAsync(FIELD_SHIP, sm, 'REPLACE');
         }
-        if (seg) {
-          // Segment tiene valores exactos: Consumer, Corporate, Home Office
-          await ws.applyFilterAsync(FIELD_SEGMENT, seg, 'REPLACE');
+        // Aplica texto como CONTAINS sobre Customer Name
+        if (q) {
+          await ws.applyFilterAsync(FIELD_TEXT, { operator: 'CONTAINS', values: [q] }, 'REPLACE');
         }
-        console.log('Applied. seg=', seg, 'cat=', cat);
+
+        console.log('Filtros aplicados', { q, sm });
       } catch (e) {
         console.error('applyFilters error', e);
-        alert('Error aplicando filtros. Revisa consola.');
+        alert('No se pudieron aplicar filtros. Revisa consola.');
       }
     }
 
     async function clearAll() {
       const ws = await getSheet();
       await Promise.all([
-        ws.clearFilterAsync(FIELD_SEGMENT).catch(()=>{}),
-        ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{})
+        ws.clearFilterAsync(FIELD_TEXT).catch(()=>{}),
+        ws.clearFilterAsync(FIELD_SHIP).catch(()=>{})
       ]);
-      document.getElementById('seg').value = '';
-      document.getElementById('cat').value = '';
-      console.log('Cleared');
+      document.getElementById('q').value = '';
+      document.getElementById('ship').value = '';
+      console.log('Filtros limpiados');
     }
 
-    btnApply.addEventListener('click', applyFilters);
-    btnClear.addEventListener('click', clearAll);
+    document.getElementById('apply').addEventListener('click', applyFilters);
+    document.getElementById('clear').addEventListener('click', clearAll);
+    document.getElementById('q').addEventListener('keyup', e => { if (e.key === 'Enter') applyFilters(); });
   </script>
 </body>
 </html>
