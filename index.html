@@ -9,21 +9,22 @@
     #viz { width: 100%; height: 78vh; border: 1px solid #ddd; border-radius: 6px; }
     .controls { display:flex; flex-wrap: wrap; gap:12px; padding:10px 0; align-items: center; }
     input, select, button { padding: 8px 10px; }
+    button:disabled { opacity: .5; }
   </style>
 </head>
 <body>
   <h3>Demo: Tableau + Search</h3>
 
   <div class="controls">
-    <input id="q" placeholder="Buscar Customer Name..." />
+    <input id="seg" placeholder="Segment (ej: Consumer)" />
     <select id="cat">
       <option value="">Todas las categorías</option>
       <option>Furniture</option>
       <option>Office Supplies</option>
       <option>Technology</option>
     </select>
-    <button id="searchBtn">Aplicar</button>
-    <button id="clearBtn">Limpiar</button>
+    <button id="searchBtn" disabled>Aplicar</button>
+    <button id="clearBtn" disabled>Limpiar</button>
   </div>
 
   <tableau-viz
@@ -34,62 +35,78 @@
   </tableau-viz>
 
   <script>
-    // Ajusta si tus campos tienen otros nombres exactos en la fuente de datos
-    const FIELD_CUSTOMER = 'Customer Name';
+    const FIELD_SEGMENT = 'Segment';
     const FIELD_CATEGORY = 'Category';
 
-    // Confirmar que el viz cargó
-    document.getElementById('viz').addEventListener('firstinteractive', () => {
+    const vizEl = document.getElementById('viz');
+    const btnApply = document.getElementById('searchBtn');
+    const btnClear = document.getElementById('clearBtn');
+
+    vizEl.addEventListener('firstinteractive', async () => {
       console.log('Viz ready');
+
+      // Habilita botones
+      btnApply.disabled = false;
+      btnClear.disabled = false;
+
+      // Log para ver tipo de hoja y campos
+      const sheet = await vizEl.getActiveSheet();
+      console.log('Sheet type:', sheet.getSheetType && sheet.getSheetType());
+      try {
+        const summary = await sheet.getSummaryDataAsync({ maxRows: 5 });
+        console.log('Columns:', summary.getColumns().map(c => c.getFieldName()));
+      } catch (e) {
+        console.warn('No summary yet:', e);
+      }
     });
 
-    async function getWorksheet() {
-      const viz = document.getElementById('viz');
-      const active = await viz.getActiveSheet();
-      if (active.getSheetType && active.getSheetType() === 'dashboard') {
-        const worksheets = await active.getWorksheets();
-        // Si tu dashboard tiene varias hojas, cambia por el nombre exacto:
-        return worksheets.find(w => w.getName() === 'Sheet 1') || worksheets[0];
+    async function getSheet() {
+      const sheet = await vizEl.getActiveSheet();
+      if (sheet.getSheetType && sheet.getSheetType() === 'dashboard') {
+        const ws = await sheet.getWorksheets();
+        console.log('Dashboard worksheets:', ws.map(w => w.getName()));
+        return ws[0]; // ajusta si usas dashboard
       }
-      return active; // Hoja única (Sheet1)
+      return sheet; // hoja única (Sheet 1)
     }
 
     async function applyFilters() {
       try {
-        const ws = await getWorksheet();
-        const q = document.getElementById('q').value.trim();
+        const ws = await getSheet();
+        const seg = document.getElementById('seg').value.trim();
         const cat = document.getElementById('cat').value;
 
         // Limpia primero
-        await ws.clearFilterAsync(FIELD_CUSTOMER).catch(()=>{});
+        await ws.clearFilterAsync(FIELD_SEGMENT).catch(()=>{});
         await ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{});
 
         if (cat) {
           await ws.applyFilterAsync(FIELD_CATEGORY, cat, 'REPLACE');
         }
-        if (q) {
-          await ws.applyFilterAsync(FIELD_CUSTOMER, { operator: 'CONTAINS', values: [q] }, 'REPLACE');
+        if (seg) {
+          // Segment tiene valores exactos: Consumer, Corporate, Home Office
+          await ws.applyFilterAsync(FIELD_SEGMENT, seg, 'REPLACE');
         }
-        console.log('Filters applied');
+        console.log('Applied. seg=', seg, 'cat=', cat);
       } catch (e) {
         console.error('applyFilters error', e);
-        alert('No se pudieron aplicar filtros. Revisa consola.');
+        alert('Error aplicando filtros. Revisa consola.');
       }
     }
 
     async function clearAll() {
-      const ws = await getWorksheet();
+      const ws = await getSheet();
       await Promise.all([
-        ws.clearFilterAsync(FIELD_CUSTOMER).catch(()=>{}),
+        ws.clearFilterAsync(FIELD_SEGMENT).catch(()=>{}),
         ws.clearFilterAsync(FIELD_CATEGORY).catch(()=>{})
       ]);
-      document.getElementById('q').value = '';
+      document.getElementById('seg').value = '';
       document.getElementById('cat').value = '';
       console.log('Cleared');
     }
 
-    document.getElementById('searchBtn').addEventListener('click', applyFilters);
-    document.getElementById('clearBtn').addEventListener('click', clearAll);
+    btnApply.addEventListener('click', applyFilters);
+    btnClear.addEventListener('click', clearAll);
   </script>
 </body>
 </html>
