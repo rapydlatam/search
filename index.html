@@ -1,99 +1,79 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Search sobre Sheet 1 (Tableau)</title>
-  <!-- Tu script de Embedding (exactamente el que pasaste) -->
-  <script type="module" src="https://us-east-1.online.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js"></script>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:16px; }
-    .controls { display:flex; flex-wrap: wrap; gap:10px; margin-bottom:10px; }
-    input, select, button { padding: 8px 10px; }
-    #tableau-viz { width: 100%; height: 78vh; border: 1px solid #ddd; border-radius: 6px; }
-  </style>
-</head>
-<body>
-  <h3>Search sencillo: Customer Name + Ship Mode</h3>
+<script>
+  const FIELD_TEXT = 'Customer Name'; // ajústalo si vemos otro nombre
+  const FIELD_SHIP = 'Ship Mode';
 
-  <div class="controls">
-    <input id="q" placeholder="Buscar en Customer Name (contains)..." />
-    <select id="ship">
-      <option value="">Ship Mode (todos)</option>
-      <option>Standard Class</option>
-      <option>Second Class</option>
-      <option>First Class</option>
-      <option>Same Day</option>
-    </select>
-    <button id="apply">Aplicar</button>
-    <button id="clear">Limpiar</button>
-  </div>
+  const viz = document.getElementById('tableau-viz');
 
-  <!-- Tu viz embebido (exactamente el que pasaste) -->
-  <tableau-viz
-    id="tableau-viz"
-    src="https://us-east-1.online.tableau.com/t/jacastellanos01-361c41eb62/views/Prueba_17598763501720/Sheet1"
-    width="1263"
-    height="615"
-    hide-tabs
-    toolbar="bottom">
-  </tableau-viz>
+  viz.addEventListener('firstinteractive', async () => {
+    console.log('Viz listo');
+    const ws = await viz.getActiveSheet();
+    console.log('Sheet type:', ws.getSheetType && ws.getSheetType());
 
-  <script>
-    // Nombres exactos de los campos en tu datasource
-    const FIELD_TEXT = 'Customer Name';
-    const FIELD_SHIP = 'Ship Mode';
-
-    const viz = document.getElementById('tableau-viz');
-
-    viz.addEventListener('firstinteractive', () => {
-      console.log('Viz listo');
-    });
-
-    async function getSheet() {
-      // Es una hoja (no dashboard), devolvemos la activa
-      return await viz.getActiveSheet();
+    // Intenta obtener columnas de resumen para ver nombres exactos
+    try {
+      const summary = await ws.getSummaryDataAsync({ maxRows: 5 });
+      const cols = summary.getColumns().map(c => c.getFieldName());
+      console.log('Columnas según summary:', cols);
+    } catch (e) {
+      console.warn('No pudo traer summary:', e);
     }
 
-    async function applyFilters() {
-      try {
-        const ws = await getSheet();
-        const q  = document.getElementById('q').value.trim();
-        const sm = document.getElementById('ship').value;
-
-        // Limpia filtros previos
-        await ws.clearFilterAsync(FIELD_TEXT).catch(()=>{});
-        await ws.clearFilterAsync(FIELD_SHIP).catch(()=>{});
-
-        // Aplica Ship Mode (exacto)
-        if (sm) {
-          await ws.applyFilterAsync(FIELD_SHIP, sm, 'REPLACE');
-        }
-        // Aplica texto como CONTAINS sobre Customer Name
-        if (q) {
-          await ws.applyFilterAsync(FIELD_TEXT, { operator: 'CONTAINS', values: [q] }, 'REPLACE');
-        }
-
-        console.log('Filtros aplicados', { q, sm });
-      } catch (e) {
-        console.error('applyFilters error', e);
-        alert('No se pudieron aplicar filtros. Revisa consola.');
-      }
+    // Lista de filtros presentes y aplicables
+    try {
+      const filters = await ws.getFiltersAsync();
+      console.log('Filtros existentes en la hoja:', filters.map(f => f.getFieldName()));
+    } catch (e) {
+      console.warn('No pudo listar filtros:', e);
     }
+  });
 
-    async function clearAll() {
+  async function getSheet() {
+    return await viz.getActiveSheet();
+  }
+
+  async function applyFilters() {
+    try {
       const ws = await getSheet();
-      await Promise.all([
-        ws.clearFilterAsync(FIELD_TEXT).catch(()=>{}),
-        ws.clearFilterAsync(FIELD_SHIP).catch(()=>{})
-      ]);
-      document.getElementById('q').value = '';
-      document.getElementById('ship').value = '';
-      console.log('Filtros limpiados');
-    }
+      const q  = document.getElementById('q').value.trim();
+      const sm = document.getElementById('ship').value;
 
-    document.getElementById('apply').addEventListener('click', applyFilters);
-    document.getElementById('clear').addEventListener('click', clearAll);
-    document.getElementById('q').addEventListener('keyup', e => { if (e.key === 'Enter') applyFilters(); });
-  </script>
-</body>
-</html>
+      console.log('Aplicando...', { q, sm });
+
+      // Limpia con cuidado: si el campo no existe, registra y sigue
+      for (const f of [FIELD_TEXT, FIELD_SHIP]) {
+        try { await ws.clearFilterAsync(f); } catch (e) { console.warn('clearFilter falló para', f, e?.message); }
+      }
+
+      if (sm) {
+        await ws.applyFilterAsync(FIELD_SHIP, sm, 'REPLACE')
+          .then(()=>console.log('OK Ship Mode'))
+          .catch(e=>{ console.error('Ship Mode error', e); throw e; });
+      }
+
+      if (q) {
+        await ws.applyFilterAsync(FIELD_TEXT, { operator: 'CONTAINS', values: [q] }, 'REPLACE')
+          .then(()=>console.log('OK Customer Name'))
+          .catch(e=>{ console.error('Customer Name error', e); throw e; });
+      }
+
+      console.log('Hecho');
+    } catch (e) {
+      console.error('applyFilters error:', e);
+      alert('No se pudieron aplicar filtros. Abre la consola y dime el mensaje que aparece.');
+    }
+  }
+
+  async function clearAll() {
+    const ws = await getSheet();
+    for (const f of [FIELD_TEXT, FIELD_SHIP]) {
+      try { await ws.clearFilterAsync(f); } catch {}
+    }
+    document.getElementById('q').value = '';
+    document.getElementById('ship').value = '';
+    console.log('Limpio');
+  }
+
+  document.getElementById('apply').addEventListener('click', applyFilters);
+  document.getElementById('clear').addEventListener('click', clearAll);
+  document.getElementById('q').addEventListener('keyup', e => { if (e.key === 'Enter') applyFilters(); });
+</script>
